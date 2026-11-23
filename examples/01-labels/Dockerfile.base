@@ -1,0 +1,18 @@
+# Base image: carries OCI labels. Artifactory turns each label into a
+# docker.label.<key> property on this image's manifest.json when it is pushed.
+ARG REGISTRY
+FROM ${REGISTRY}/alpine:3.20
+
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_URL=unknown
+
+LABEL org.opencontainers.image.title="labels-base" \
+      org.opencontainers.image.source="${SOURCE_URL}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      com.example.image.role="base" \
+      com.example.image.golden="true"
+
+CMD ["echo", "labels-base"]

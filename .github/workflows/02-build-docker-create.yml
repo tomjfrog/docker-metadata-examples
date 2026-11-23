@@ -1,0 +1,142 @@
+# Use case 2: Build-Info from a natively built image via `jf rt build-docker-create`,
+# plus a GitHub build attestation that is ingested into JFrog Evidence.
+name: 02 build-docker-create and Evidence
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write        # OIDC to JFrog and Sigstore signing
+  contents: read
+  attestations: write    # actions/attest-build-provenance
+  artifact-metadata: write
+jobs:
+  build-info:
+    runs-on: ubuntu-latest
+    env:
+      JF_URL: ${{ vars.JF_URL }}
+      REGISTRY_HOST: ${{ vars.JF_DOCKER_REGISTRY }}
+      REPO_LOCAL: oci-metadata-docker-local
+      BUILD_NAME: oci-metadata-build-info
+      BUILD_NUMBER: ${{ github.run_number }}
+      IMAGE_NAME: build-info-app
+      TAG: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Setup JFrog CLI (OIDC)
+        id: jf
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          oidc-provider-name: ${{ vars.OIDC_PROVIDER_NAME }}
+
+      - name: Docker login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ steps.jf.outputs.oidc-user }}
+          password: ${{ steps.jf.outputs.oidc-token }}
+
+      # A plain buildx push: no jf docker push, so no Build-Info is produced yet.
+      - name: Build and push with plain Docker (no JFrog CLI)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: examples/02-build-info
+          platforms: linux/amd64
+          provenance: false   # one manifest.json, so Evidence and Build-Info share one subject
+          push: true
+          tags: ${{ env.REGISTRY_HOST }}/${{ env.REPO_LOCAL }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          build-args: VCS_REF=${{ github.sha }}
+
+      - name: Create Build-Info from the pushed image
+        run: |
+          set -euo pipefail
+          # image-file: ONE line, <image>@sha256:<manifest digest>
+          IMAGE="${REGISTRY_HOST}/${REPO_LOCAL}/${IMAGE_NAME}:${TAG}"
+          echo "${IMAGE}@${{ steps.build.outputs.digest }}" | tee image-file.txt
+
+          jf rt build-docker-create "${REPO_LOCAL}" \
+            --image-file image-file.txt \
+            --build-name "${BUILD_NAME}" --build-number "${BUILD_NUMBER}"
+          jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUMBER}"
+          jf rt build-add-git "${BUILD_NAME}" "${BUILD_NUMBER}" || true
+          jf rt build-publish "${BUILD_NAME}" "${BUILD_NUMBER}"
+
+      # The subject uses the oci:// prefix; setup-jfrog-cli's post step finds the
+      # attestation and creates the Evidence on the image automatically.
+      - name: Attest build provenance (GitHub, to JFrog Evidence)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: oci://${{ env.REGISTRY_HOST }}/${{ env.REPO_LOCAL }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+
+      - name: Inspect the Build-Info
+        run: |
+          set -euo pipefail
+          source scripts/lib.sh
+          BI=$(rt -s "/api/build/${BUILD_NAME}/${BUILD_NUMBER}")
+          echo "$BI" | jq -e '.buildInfo.modules | length > 0' >/dev/null \
+            || { echo "::error::Build-Info has no modules"; echo "$BI"; exit 1; }
+          {
+            echo "## Use case 2: Build-Info via \`jf rt build-docker-create\`"
+            echo
+            echo "Build \`${BUILD_NAME}\` #${BUILD_NUMBER}"
+            echo
+            echo "**Modules and artifacts** (manifest, config and layer blobs):"
+            echo
+            echo "| Module | Artifact | Type |"
+            echo "|---|---|---|"
+            echo "$BI" | jq -r '.buildInfo.modules[] | .id as $m | (.artifacts // [])[] | "| `\($m)` | `\(.name)` | \(.type // "") |"'
+            echo
+            echo "**Dependencies** (base layers recorded as module dependencies): $(echo "$BI" | jq '[.buildInfo.modules[].dependencies // [] | length] | add // 0')"
+            echo
+            echo "**VCS:** $(echo "$BI" | jq -r '.buildInfo.vcs[0] // {} | "\(.url // "n/a") @ \(.revision // "n/a")"')"
+            echo
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # Reverse lookup: which build produced this image?
+          echo "Reverse lookup (image -> build) via AQL:" | tee -a "$GITHUB_STEP_SUMMARY"
+          cat > /tmp/reverse.aql <<AQL
+          items.find({"repo":"${REPO_LOCAL}","path":"${IMAGE_NAME}/${TAG}","name":"manifest.json",
+            "artifact.module.build.name":"${BUILD_NAME}","artifact.module.build.number":"${BUILD_NUMBER}"}
+          ).include("repo","path","name")
+          AQL
+          sed -i 's/^          //' /tmp/reverse.aql
+          rt -s -XPOST /api/search/aql -H 'Content-Type: text/plain' -d @/tmp/reverse.aql \
+            | jq -c '.results' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Evidence is ingested by the setup-jfrog-cli post step, which runs at the very end
+      # of the job. So the Evidence check lives in a second job.
+  verify-evidence:
+    needs: build-info
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      JF_URL: ${{ vars.JF_URL }}
+      REPO_LOCAL: oci-metadata-docker-local
+      IMAGE_NAME: build-info-app
+      TAG: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jfrog/setup-jfrog-cli@v4
+        with:
+          oidc-provider-name: ${{ vars.OIDC_PROVIDER_NAME }}
+      - name: Verify provenance Evidence on the image
+        run: |
+          set -euo pipefail
+          source scripts/lib.sh
+          for m in manifest.json list.manifest.json; do
+            EV=$(rt -s "/../evidence/api/v1/subject/${REPO_LOCAL}/${IMAGE_NAME}/${TAG}/${m}")
+            N=$(echo "$EV" | jq '.evidence | length' 2>/dev/null || echo 0)
+            [[ "$N" -gt 0 ]] && { SUBJECT=$m; break; }
+          done
+          [[ "${N:-0}" -gt 0 ]] || { echo "::error::No Evidence found on ${IMAGE_NAME}:${TAG}"; echo "$EV"; exit 1; }
+          {
+            echo "### Evidence on \`${IMAGE_NAME}:${TAG}\` (\`${SUBJECT}\`)"
+            echo
+            echo "| Name | Predicate type | Created by |"
+            echo "|---|---|---|"
+            echo "$EV" | jq -r '.evidence[] | "| `\(.name)` | `\(.predicate_type // .predicateType // "")` | \(.created_by // .createdBy // "")|"'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,5 @@
+# Base image. Intentionally an older Ubuntu release so Xray has findings to attribute.
+ARG REGISTRY
+FROM ${REGISTRY}/ubuntu:22.04
+LABEL com.example.image.role="base"
+CMD ["echo", "bid-base"]

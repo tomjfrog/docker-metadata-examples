@@ -1,0 +1,8 @@
+items.find({
+  "$and": [
+    {"repo": "oci-metadata-docker-local"},
+    {"name": "manifest.json"},
+    {"type": "file"},
+    {"@docker.label.com.example.image.golden": "true"}
+  ]
+}).include("repo", "path", "name")

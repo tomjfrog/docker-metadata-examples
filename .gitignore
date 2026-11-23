@@ -1,0 +1,6 @@
+out/
+*.key
+.DS_Store
+.boostgraph/
+SPEC.md
+.boost/
