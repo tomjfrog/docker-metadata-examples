@@ -1,5 +1,5 @@
 # App image built FROM the base. Docker copies the base's labels into this image's
-# config, so un-overridden labels (e.g. com.example.image.golden) are inherited.
+# config, so un-overridden labels (e.g. com.example.image.family) are inherited.
 # Labels redeclared here (role, title) override the base's values.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}

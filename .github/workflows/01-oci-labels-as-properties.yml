@@ -83,8 +83,8 @@ jobs:
           # Override: the app redeclared role; the base kept its own value.
           [[ "$(prop labels-base com.example.image.role)" == base ]] || { echo "::error::base role != base"; exit 1; }
           [[ "$(prop labels-app  com.example.image.role)" == app  ]] || { echo "::error::app role != app (override failed)"; exit 1; }
-          # Inheritance: the app never declared golden, the base did.
-          [[ "$(prop labels-app  com.example.image.golden)" == true ]] || { echo "::error::golden label not inherited"; exit 1; }
+          # Inheritance: the app never declared family, the base did.
+          [[ "$(prop labels-app  com.example.image.family)" == demo ]] || { echo "::error::family label not inherited"; exit 1; }
 
           # 1) REST property search
           REST=$(rt -s "/api/search/prop?docker.label.com.example.team=payments&repos=${REPO_LOCAL}" | jq -r '.results[].uri')
@@ -103,9 +103,9 @@ jobs:
             echo
             echo "**REST** \`GET /api/search/prop?docker.label.com.example.team=payments\`"
             echo '```'; echo "$REST"; echo '```'
-            echo "**AQL** (\`queries/labels.aql\`: images carrying the inherited golden label)"
+            echo "**AQL** (\`queries/labels.aql\`: images carrying the inherited family label)"
             echo '```'; echo "$AQL"; echo '```'
             echo "**CLI** \`jf rt search --props docker.label.com.example.team=payments\`"
             echo '```'; echo "$CLI"; echo '```'
-            echo "Takeaways: the app override of \`role\` won, the base's \`golden\` label was inherited, and Artifactory copies labels to properties per image (it does not walk parents)."
+            echo "Takeaways: the app override of \`role\` won, the base's \`family\` label was inherited, and Artifactory copies labels to properties per image (it does not walk parents)."
           } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -13,6 +13,6 @@ LABEL org.opencontainers.image.title="labels-base" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="Apache-2.0" \
       com.example.image.role="base" \
-      com.example.image.golden="true"
+      com.example.image.family="demo"
 
 CMD ["echo", "labels-base"]

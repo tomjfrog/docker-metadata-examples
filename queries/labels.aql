@@ -3,6 +3,6 @@ items.find({
     {"repo": "oci-metadata-docker-local"},
     {"name": "manifest.json"},
     {"type": "file"},
-    {"@docker.label.com.example.image.golden": "true"}
+    {"@docker.label.com.example.image.family": "demo"}
   ]
 }).include("repo", "path", "name")
