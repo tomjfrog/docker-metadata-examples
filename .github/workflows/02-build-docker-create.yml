@@ -88,7 +88,6 @@ jobs:
             echo "|---|---|---|"
             echo "$BI" | jq -r '.buildInfo.modules[] | .id as $m | (.artifacts // [])[] | "| `\($m)` | `\(.name)` | \(.type // "") |"'
             echo
-            echo "**Dependencies** (base layers recorded as module dependencies): $(echo "$BI" | jq '[.buildInfo.modules[].dependencies // [] | length] | add // 0')"
             echo
             echo "**VCS:** $(echo "$BI" | jq -r '.buildInfo.vcs[0] // {} | "\(.url // "n/a") @ \(.revision // "n/a")"')"
             echo
