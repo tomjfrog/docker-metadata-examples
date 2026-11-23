@@ -11,7 +11,7 @@ mk_policy() { # $1=name $2=skip(true|false)
     rules:[{name:"medium-and-above", priority:1,
       criteria:({min_severity:"medium"} + (if $skip then {skip_base_image:true} else {} end)),
       actions:{block_download:{active:false,unscanned:false}, fail_build:false, notify_watch_recipients:false}}]}' \
-  | xr -s -f -XPOST /api/v2/policies -H 'Content-Type: application/json' -d @- >/dev/null
+  | xr_json POST /api/v2/policies >/dev/null
   echo "policy created: $1"
 }
 mk_watch() { # $1=watch $2=policy
@@ -21,7 +21,7 @@ mk_watch() { # $1=watch $2=policy
     project_resources:{resources:[{type:"repository", bin_mgr_id:"default", name:$r,
                                    filters:[{type:"regex", value:".*"}]}]},
     assigned_policies:[{name:$p, type:"security"}]}' \
-  | xr -s -f -XPOST /api/v2/watches -H 'Content-Type: application/json' -d @- >/dev/null
+  | xr_json POST /api/v2/watches >/dev/null
   echo "watch created: $1"
 }
 mk_policy bid-all-vulns false

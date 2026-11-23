@@ -18,3 +18,10 @@ rt_status() { rt -s -o /dev/null -w '%{http_code}' "$1"; }
 summary() { # append markdown to the job summary (or stdout when local)
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then cat >> "$GITHUB_STEP_SUMMARY"; else cat; fi
 }
+
+# JSON body from stdin. `jf rt|xr curl` does not read a body from stdin, so go via a temp file.
+# usage: <json producer> | rt_json PUT /api/repositories/x
+_json() { local tool=$1 m=$2 p=$3 f; f=$(mktemp); cat > "$f"
+  "$tool" -s --fail-with-body -X"$m" "$p" -H 'Content-Type: application/json' -d @"$f"; local rc=$?; rm -f "$f"; return $rc; }
+rt_json() { _json rt "$@"; }
+xr_json() { _json xr "$@"; }

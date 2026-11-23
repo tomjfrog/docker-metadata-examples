@@ -6,7 +6,7 @@ ensure_repo() { # $1=key $2=json
   local code; code=$(rt_status "/api/repositories/$1")
   if [[ "$code" == "200" ]]; then echo "exists: $1"; return; fi
   echo "creating: $1"
-  printf '%s' "$2" | rt -s -f -XPUT "/api/repositories/$1" -H 'Content-Type: application/json' -d @- >/dev/null
+  printf '%s' "$2" | rt_json PUT "/api/repositories/$1" >/dev/null
 }
 
 # The shared Docker Hub remote must already exist.
@@ -26,13 +26,13 @@ if ! echo "$CUR" | jq -e '.repo_config' >/dev/null 2>&1; then
   CUR=$(jq -nc --arg r "$REPO_LOCAL" '{repo_name:$r,repo_config:{}}')
 fi
 echo "$CUR" | jq -c '.repo_config.retention_in_days = 90' \
-  | xr -s -XPUT /api/v1/repos_config -H 'Content-Type: application/json' -d @- \
+  | xr_json PUT /api/v1/repos_config \
   || echo "::warning::Could not set Xray repos_config (check Xray entitlement)"
 
 # Xray: index the demo build
 CUR=$(xr -s "/api/v1/binMgr/default/builds" || echo '{}')
 echo "$CUR" | jq -c --arg b "$BUILD_NAME" '.indexed_builds = ((.indexed_builds // []) + [$b] | unique)' \
-  | xr -s -XPUT /api/v1/binMgr/default/builds -H 'Content-Type: application/json' -d @- \
+  | xr_json PUT /api/v1/binMgr/default/builds \
   || echo "::warning::Could not index build ${BUILD_NAME}"
 
 {

@@ -6,7 +6,7 @@ img=$1; tag=$2; out=$3
 for i in $(seq 1 60); do
   for m in manifest.json list.manifest.json; do
     jq -nc --arg p "default/${REPO_LOCAL}/${img}/${tag}/${m}" '{paths:[$p]}' \
-      | xr -s -XPOST /api/v2/summary/artifact -H 'Content-Type: application/json' -d @- > "$out" || true
+      | xr_json POST /api/v2/summary/artifact > "$out" || true
     if jq -e '(.artifacts // []) | length > 0' "$out" >/dev/null 2>&1; then
       # scanned once general info is present and no error marks it in-progress
       if jq -e '.artifacts[0].general.name? and ((.artifacts[0].issues // []) | length > 0)' "$out" >/dev/null 2>&1; then
